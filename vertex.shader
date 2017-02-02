@@ -3,7 +3,7 @@
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 color;
 
-out vec3 ourColor;
+out vec3 newColour;
 
 uniform mat4 model_matrix;
 uniform mat4 view_matrix;
@@ -12,5 +12,5 @@ uniform mat4 proj_matrix;
 void main()
 {
 	gl_Position = proj_matrix * view_matrix * model_matrix * vec4(position.x, position.y, position.z, 1.0f);
-	ourColor = color;
+	newColour = color;
 }

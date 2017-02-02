@@ -11,6 +11,7 @@
 #include <fstream>
 #include <vector>
 #include <sstream>
+
 #include <glm.hpp>			// include GL Math
 #include "gtc\matrix_transform.hpp"
 #include "gtc\type_ptr.hpp"
@@ -19,19 +20,29 @@
 using namespace std;
 
 // Window dimensions
-const GLuint WIDTH = 800, HEIGHT = 600;
+const GLuint WIDTH = 800, HEIGHT = 800;
+const float ASPECT = float(WIDTH) / HEIGHT;
 
 glm::vec3 triangle_scale;
 glm::vec3 camera_translation = glm::vec3(0.0f, 0.0f, -1.0f);
 
-const float TRIANGLE_MOVEMENT_STEP = 0.1f;
-const float CAMERA_PAN_STEP = 0.2f;
+float rotation = 9.0;
 
 // Declare the matrices
 glm::mat4 model_matrix;
 glm::mat4 view_matrix;
 glm::mat4 proj_matrix;
 
+const float TRIANGLE_MOVEMENT_STEP = 0.5f;
+const float CAMERA_PAN_STEP = 0.2f;
+
+GLfloat radius = 10.0f;
+GLfloat camX = sin(glfwGetTime()) * radius;
+GLfloat camZ = cos(glfwGetTime()) * radius;
+glm::mat4 view;
+
+float valx = 10.0;
+float valz = 0.0;
 
 // Is called whenever a key is pressed/released via GLFW
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode)
@@ -39,24 +50,38 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 	std::cout << key << std::endl;
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, GL_TRUE);
-	if (key == GLFW_KEY_A && action == GLFW_PRESS)
-		camera_translation.x += CAMERA_PAN_STEP;
-	if (key == GLFW_KEY_D && action == GLFW_PRESS)
-		camera_translation.x -= CAMERA_PAN_STEP;
-	if (key == GLFW_KEY_W && action == GLFW_PRESS)
-		camera_translation.y -= CAMERA_PAN_STEP;
-	if (key == GLFW_KEY_S && action == GLFW_PRESS)
-		camera_translation.y += CAMERA_PAN_STEP;
 
 	if (key == GLFW_KEY_LEFT && action == GLFW_PRESS)
-		triangle_scale.x += TRIANGLE_MOVEMENT_STEP;
+		valz -= 10;
 	if (key == GLFW_KEY_RIGHT && action == GLFW_PRESS)
-		triangle_scale.x -= TRIANGLE_MOVEMENT_STEP;
+		valz += 10;
 	if (key == GLFW_KEY_UP && action == GLFW_PRESS)
-		triangle_scale.y += TRIANGLE_MOVEMENT_STEP;
+		valx += 10;
 	if (key == GLFW_KEY_DOWN && action == GLFW_PRESS)
-		triangle_scale.y -= TRIANGLE_MOVEMENT_STEP;
+		valx -= 10;
+
+	if (key == GLFW_KEY_W && action == GLFW_PRESS)
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+	if (key == GLFW_KEY_T && action == GLFW_PRESS)
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+	if (key == GLFW_KEY_P && action == GLFW_PRESS) {
+		glPointSize(10);
+		glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
+
+	}
+	
 }
+	void window_size_callback(GLFWwindow* window, int width, int height) {
+		glMatrixMode(GL_PROJECTION);
+		glLoadIdentity();
+
+		int w = height * ASPECT;
+		int left = (width - w) / 2;
+		
+		glViewport(left, 0, w, height); 
+	}
 
 // The MAIN function, from here we start the application and run the game loop
 int main()
@@ -71,7 +96,7 @@ int main()
 	glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);
 
 	// Create a GLFWwindow object that we can use for GLFW's functions
-	GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "Triangle", nullptr, nullptr);
+	GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "Assignment 1_26990940", nullptr, nullptr);
 	if (window == nullptr)
 	{
 		std::cout << "Failed to create GLFW window" << std::endl;
@@ -96,6 +121,7 @@ int main()
 	glfwGetFramebufferSize(window, &width, &height);
 
 	glViewport(0, 0, width, height);
+	glfwSetWindowSizeCallback(window, window_size_callback);
 
 	// Build and compile our shader program
 	// Vertex shader
@@ -175,114 +201,179 @@ int main()
 
 	glUseProgram(shaderProgram);
 
-	// Get input
-	int profileCurveNum;
-	int trajCurveNum;
+	/////////////// GET INPUT TO RENDER SHAPES FROM TXT FILES /////////////// 
+
+	// vector curves
 	vector<glm::vec3*>* profileCurve = new vector<glm::vec3*>;
 	vector<glm::vec3*>* trajCurve = new vector<glm::vec3*>;
-	float x, y, z;
+	
+	// Get input from file
 	ifstream inputFile;
 	inputFile.open("input_a1.txt");
 	
-	if (inputFile.is_open()) {
-		string line;
+	// initialize vertex array and counters
+	GLfloat* vertices;
+	int objectType;
+	int profileCurveNum;
+	int trajCurveNum;
+	string line;
+	float x, y, z;
+	int size, index, indicesSize, indicesIndex;
+	int *indices;
+
+	// get object type (sweep/ rotation)
+	getline(inputFile, line);
+	objectType = stoi(line);
+		
+	if (objectType == 0) { // translational sweep
+		
+		// profile curve
 		getline(inputFile, line);
-		int objectType = stoi(line);
-		
-		if (objectType == 0) { // transitional sweep
-			// profile curve
+		profileCurveNum = stoi(line);
+		for (int i = 0; i < profileCurveNum; i++) {
 			getline(inputFile, line);
-			profileCurveNum = stoi(line);
-			for (int i = 0; i < profileCurveNum; i++) {
-				getline(inputFile, line);
-				stringstream lineStream(line);
+			stringstream lineStream(line);
 
-				lineStream >> x >> y >> z;
-				cout << x << ", " << y << ", " << z << endl;
+			// get the x, y, z and store them
+			lineStream >> x >> y >> z;
+			profileCurve->push_back(new glm::vec3(x, y, z));
+		}
 
-				profileCurve->push_back(new glm::vec3(x, y, z));
-			}
-			// trajectory curve
+		// trajectory curve
+		getline(inputFile, line);
+		trajCurveNum = stoi(line);
+		for (int i = 0; i < trajCurveNum; i++) {
 			getline(inputFile, line);
-			trajCurveNum = stoi(line);
-			for (int i = 0; i < trajCurveNum; i++) {
-				getline(inputFile, line);
-				stringstream lineStream(line);
+			stringstream lineStream(line);
 
-				lineStream >> x >> y >> z;
-				cout << x << ", " << y << ", " << z << endl;
-
-				trajCurve->push_back(new glm::vec3(x, y, z));
-			}
+			// get the x, y, z and store them
+			lineStream >> x >> y >> z;
+			trajCurve->push_back(new glm::vec3(x, y, z));
 		}
-		else { // rotational sweep
 
-		}
-	}
+		// initialize array sizes and counters 
+		index = 0, indicesIndex = 0;
+		size = profileCurve->size() * trajCurve->size() * 6;
+		vertices = new GLfloat[size];
+		indicesSize = ((profileCurve->size() - 1) * (trajCurve->size() - 1) * 6);
+		indices = new int[indicesSize];
 
-	int size = profileCurve->size()*trajCurve->size() * 6;
-	int index = 0, indicesIndex = 0;
-	GLfloat* vertices = new GLfloat[size];
-	
-	int indicesSize = ((profileCurve->size() - 1) * (trajCurve->size() - 1) * 2 * 3);
-	GLuint* indices = new GLuint[indicesSize];
+		// loop through curves to get vertices
+		for (int p = 0; p < profileCurve->size(); p++) {
+			for (int t = 0; t < trajCurve->size(); t++) {
 
-	for (int p = 0; p < profileCurve->size(); p++) {
-		
-		glm::vec3* pVec = profileCurve->at(p);
+				// set height variable to adjust the colour
+				float height = (float(p) / float(profileCurve->size()));
 
-		for (int t = 0; t < trajCurve->size(); t++) {
-			
-			float height = (float(p) / float(profileCurve->size()));
+				vertices[index] = profileCurve->at(p)->x + trajCurve->at(t)->x;
+				vertices[index + 1] = profileCurve->at(p)->y + trajCurve->at(t)->y;
+				vertices[index + 2] = profileCurve->at(p)->z + trajCurve->at(t)->z;
+				vertices[index + 3] = height;
+				vertices[index + 4] = height;
+				vertices[index + 5] = 0;
+				index += 6;
 
-			glm::vec3* tVec = trajCurve->at(t);
+				// set up the indices
+				if (t > 0 && p > 0) {
+					indices[indicesIndex] = index / 6 - 1;
+					indices[indicesIndex + 1] = index / 6 - 1 - 1;
+					indices[indicesIndex + 2] = index / 6 - trajCurve->size() - 2;
 
-			vertices[index] = pVec->x + tVec->x;
-			vertices[index + 1] = pVec->y + tVec->y;
-			vertices[index + 2] = pVec->z + tVec->z;
-			vertices[index + 3] = height;
-			vertices[index + 4] = height;
-			vertices[index + 5] = 0;
-			index += 6;
-
-			if (t > 0 && p > 0) {
-				indices[indicesIndex] = index / 6 - 1;
-				indices[indicesIndex + 1] = index / 6 - 2;
-				indices[indicesIndex + 2] = index / 6 - trajCurve->size() - 2;
-
-				indices[indicesIndex + 3] = index / 6 - 1;
-				indices[indicesIndex + 4] = index / 6 - trajCurve->size() - 1;
-				indices[indicesIndex + 5] = index / 6 - trajCurve->size() - 2;
-				indicesIndex += 6;
+					indices[indicesIndex + 3] = index / 6 - 1;
+					indices[indicesIndex + 4] = index / 6 - trajCurve->size() - 1;
+					indices[indicesIndex + 5] = index / 6 - trajCurve->size() - 2;
+					indicesIndex += 6;
+				}
 			}
 		}
 	}
-	//TESTING
-	int c = 0;
-	for (int i = 0; i < size; i++)
-	{
-		printf("%f ", vertices[i]);
-		c++;
-		if (c > 2)
-		{
-			c = 0;
-			std::cout << std::endl;
+	else if (objectType != 0) { // rotational sweep
+		int numOfSpans = 0;
+
+		// get number of spans
+		getline(inputFile, line);
+		numOfSpans = stoi(line);
+
+		// get curve profile
+		getline(inputFile, line);
+		profileCurveNum = stoi(line);
+		for (int i = 0; i < profileCurveNum; i++) {
+			getline(inputFile, line);
+			stringstream lineStream(line);
+
+			// get the x, y, z and store them
+			lineStream >> x >> y >> z;
+			profileCurve->push_back(new glm::vec3(x, y, z));
 		}
-	}
-	c = 0;
-	std::cout << "Indices " << indicesSize << std::endl;
-	for (int i = 0; i < indicesSize; i++)
-	{
-		printf("%d ", indices[i]);
-		c++;
-		if (c > 2)
-		{
-			c = 0;
-			std::cout << std::endl;
+
+		// initialize array sizes and counters
+		index = 0, indicesIndex = 0;
+		size = profileCurve->size() * numOfSpans * 6;
+		vertices = new GLfloat[size];
+		indicesSize = ((profileCurve->size() - 1) * numOfSpans * 6);
+		indices = new int[indicesSize];
+
+
+		glm::mat4x4 rotation = glm::mat4(1.0f);
+
+		// loop through curves to get vertices
+		for (int s = 0; s < numOfSpans; s++) {
+			for (int t = 0; t < profileCurveNum; t++) {
+				
+				glm::vec4 profile = glm::vec4(*profileCurve->at(t), 1.0);
+				glm::vec4 finalVector = profile * glm::rotate(rotation, glm::radians(360.0f / (float)numOfSpans)*s, glm::vec3(0, 0, 1));
+
+				// set height variable to adjust the colour
+				float height = (float(t) / float(profileCurve->size()));
+
+				vertices[index] = finalVector.x;
+				vertices[index + 1] = finalVector.y;
+				vertices[index + 2] = finalVector.z;
+				vertices[index + 3] = height;
+				vertices[index + 4] = height;
+				vertices[index + 5] = 0;
+				index += 6;
+
+				// set up the indices
+				if (t > 0 && s > 0) {
+					indices[indicesIndex] = index / 6 - 1;
+					indices[indicesIndex + 1] = index / 6 - 1 - 1;
+					indices[indicesIndex + 2] = index / 6 - profileCurve->size() - 2;
+
+					indices[indicesIndex + 3] = index / 6 - 1;
+					indices[indicesIndex + 4] = index / 6 - profileCurve->size() - 1;
+					indices[indicesIndex + 5] = index / 6 - profileCurve->size() - 2;
+					indicesIndex += 6;
+				}
+				else if (t > 0) {
+					indices[indicesIndex] = index / 6 - 1;
+					indices[indicesIndex + 1] = index / 6 - 1 - 1;
+					indices[indicesIndex + 2] = size / 6 - profileCurve->size() + index / 6 - 2;
+
+					indices[indicesIndex + 3] = index / 6 - 1;
+					indices[indicesIndex + 4] = size / 6 - profileCurve->size() + index / 6 - 1;
+					indices[indicesIndex + 5] = size / 6 - profileCurve->size() + index / 6 - 2;
+					indicesIndex += 6;
+				}
+			}
 		}
 	}
 
-	
+	// Set up the Camera
+	glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
+	glm::vec3 cameraTarget = glm::vec3(0.0f, 0.0f, 0.0f);
+
+	glm::vec3 cameraDirection = glm::normalize(cameraPos - cameraTarget);
+
+	glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
+	glm::vec3 cameraRight = glm::normalize(glm::cross(up, cameraDirection));
+
+	glm::vec3 cameraUp = glm::cross(cameraDirection, cameraRight);
+
+	glm::mat4 view;
+	view = glm::lookAt(glm::vec3(0.0f, 0.0f, 3.0f),
+		glm::vec3(0.0f, 0.0f, 0.0f),
+		glm::vec3(0.0f, 1.0f, 0.0f));
 
 	GLuint VAO, VBO, EBO;
 	glGenVertexArrays(1, &VAO);
@@ -308,9 +399,11 @@ int main()
 
 	triangle_scale = glm::vec3(1.0f); //shorthand, initializes all 4 compenents to 1.0f
 
-	GLint mm = glGetUniformLocation(shaderProgram, "model");
-	GLint vm = glGetUniformLocation(shaderProgram, "view");
-	GLint pm = glGetUniformLocation(shaderProgram, "proj");
+	GLuint mm = glGetUniformLocation(shaderProgram, "model_matrix");
+	GLuint vm = glGetUniformLocation(shaderProgram, "view_matrix");
+	GLuint pm = glGetUniformLocation(shaderProgram, "proj_matrix");
+
+	float rotation = 9;
 
 	// Game loop
 	while (!glfwWindowShouldClose(window))
@@ -320,21 +413,21 @@ int main()
 
 		// Render
 		// Clear the colorbuffer
-		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+		glClearColor(0.0f, 0.2f, 0.3f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		glm::mat4 model_matrix;
 		model_matrix = glm::scale(model_matrix, triangle_scale);
-
-		glm::mat4 view_matrix;
-		view_matrix = glm::lookAt(glm::vec3(0.0f, 0.0f, 1.0f),	 // camera positioned here
+		model_matrix = glm::rotate(model_matrix, glm::radians(valx), glm::vec3(1, 0, 0));
+		model_matrix = glm::rotate(model_matrix, glm::radians(y), glm::vec3(0, 1, 0));
+		model_matrix = glm::rotate(model_matrix, glm::radians(valz), glm::vec3(0, 0, 1));
+		
+		view_matrix = glm::lookAt(glm::vec3(0.0f, 0.0f, 3.0f),	 // camera positioned here
 									glm::vec3(0.0f, 0.0f, 0.0f), // looks at origin
 									glm::vec3(0.0f, 1.0f, 0.0f));// up vector
 
-		//view_matrix = glm::translate(view_matrix, camera_translation);
-
 		glm::mat4 proj_matrix;
-		proj_matrix = glm::perspective(45.0f, (GLfloat)width / (GLfloat)height, 0.0f, 100.0f);
+		proj_matrix = glm::perspective(45.0f, (GLfloat)width / (GLfloat)height, 0.1f, 100.0f);
 
 
 		glUniformMatrix4fv(mm, 1, GL_FALSE, glm::value_ptr(model_matrix));
