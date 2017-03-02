@@ -1,5 +1,6 @@
-//Lab 2
-//modified from http://learnopengl.com/
+// Brandon Amyot 26990940
+// modified from http://learnopengl.com/
+// modified from Lab 2
 
 #include "stdafx.h"
 
@@ -41,8 +42,10 @@ GLfloat camX = sin(glfwGetTime()) * radius;
 GLfloat camZ = cos(glfwGetTime()) * radius;
 glm::mat4 view;
 
-float valx = 10.0;
-float valz = 0.0;
+float xValue = 0.0;
+float zValue = 0.0;
+float cameraZoom = 3.0f;
+
 
 // Is called whenever a key is pressed/released via GLFW
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode)
@@ -52,36 +55,41 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 		glfwSetWindowShouldClose(window, GL_TRUE);
 
 	if (key == GLFW_KEY_LEFT && action == GLFW_PRESS)
-		valz -= 10;
+		zValue -= 10;
 	if (key == GLFW_KEY_RIGHT && action == GLFW_PRESS)
-		valz += 10;
+		zValue += 10;
 	if (key == GLFW_KEY_UP && action == GLFW_PRESS)
-		valx += 10;
+		xValue += 10;
 	if (key == GLFW_KEY_DOWN && action == GLFW_PRESS)
-		valx -= 10;
-
-	if (key == GLFW_KEY_W && action == GLFW_PRESS)
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		xValue -= 10;
 
 	if (key == GLFW_KEY_T && action == GLFW_PRESS)
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
+	if (key == GLFW_KEY_W && action == GLFW_PRESS)
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
 	if (key == GLFW_KEY_P && action == GLFW_PRESS) {
 		glPointSize(10);
 		glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
-
 	}
-	
 }
-	void window_size_callback(GLFWwindow* window, int width, int height) {
-		glMatrixMode(GL_PROJECTION);
-		glLoadIdentity();
 
-		int w = height * ASPECT;
-		int left = (width - w) / 2;
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
+	
+	cameraZoom += (float)yoffset * 0.05; // 0.05 to help slow down the zooming
+	cout << "scrolling" << endl;
+}
+
+void window_size_callback(GLFWwindow* window, int width, int height) {
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+
+	int w = height * ASPECT;
+	int left = (width - w) / 2;
 		
-		glViewport(left, 0, w, height); 
-	}
+	glViewport(left, 0, w, height); 
+}
 
 // The MAIN function, from here we start the application and run the game loop
 int main()
@@ -104,9 +112,12 @@ int main()
 		return -1;
 	}
 	glfwMakeContextCurrent(window);
+
 	// Set the required callback functions
 	glfwSetKeyCallback(window, key_callback);
-	
+	glfwSetScrollCallback(window, scroll_callback);
+
+
 	// Set this to true so GLEW knows to use a modern approach to retrieving function pointers and extensions
 	glewExperimental = GL_TRUE;
 	// Initialize GLEW to setup the OpenGL Function pointers
@@ -122,6 +133,9 @@ int main()
 
 	glViewport(0, 0, width, height);
 	glfwSetWindowSizeCallback(window, window_size_callback);
+
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LEQUAL);
 
 	// Build and compile our shader program
 	// Vertex shader
@@ -260,17 +274,20 @@ int main()
 
 		// loop through curves to get vertices
 		for (int p = 0; p < profileCurve->size(); p++) {
+			glm::vec3* pVec = profileCurve->at(p);
+
 			for (int t = 0; t < trajCurve->size(); t++) {
+				glm::vec3* tVec = trajCurve->at(t);
 
 				// set height variable to adjust the colour
 				float height = (float(p) / float(profileCurve->size()));
 
-				vertices[index] = profileCurve->at(p)->x + trajCurve->at(t)->x;
-				vertices[index + 1] = profileCurve->at(p)->y + trajCurve->at(t)->y;
-				vertices[index + 2] = profileCurve->at(p)->z + trajCurve->at(t)->z;
+				vertices[index] = pVec->x + tVec->x;
+				vertices[index + 1] = pVec->y + tVec->y;
+				vertices[index + 2] = pVec->z + tVec->z;
 				vertices[index + 3] = height;
-				vertices[index + 4] = height;
-				vertices[index + 5] = 0;
+				vertices[index + 4] = height + 0.5;
+				vertices[index + 5] = 0.5;
 				index += 6;
 
 				// set up the indices
@@ -318,26 +335,27 @@ int main()
 
 		// loop through curves to get vertices
 		for (int s = 0; s < numOfSpans; s++) {
+
 			for (int t = 0; t < profileCurveNum; t++) {
-				
-				glm::vec4 profile = glm::vec4(*profileCurve->at(t), 1.0);
-				glm::vec4 finalVector = profile * glm::rotate(rotation, glm::radians(360.0f / (float)numOfSpans)*s, glm::vec3(0, 0, 1));
+					
+				glm::vec4 newVec = glm::vec4(*profileCurve->at(t), 1.0);
+				glm::vec4 rotationVec = newVec * glm::rotate(rotation, glm::radians(360.0f / (float)numOfSpans)*s, glm::vec3(0, 0, 1));
 
 				// set height variable to adjust the colour
 				float height = (float(t) / float(profileCurve->size()));
 
-				vertices[index] = finalVector.x;
-				vertices[index + 1] = finalVector.y;
-				vertices[index + 2] = finalVector.z;
+				vertices[index] = rotationVec.x;
+				vertices[index + 1] = rotationVec.y;
+				vertices[index + 2] = rotationVec.z;
 				vertices[index + 3] = height;
-				vertices[index + 4] = height;
-				vertices[index + 5] = 0;
+				vertices[index + 4] = height + 0.5;
+				vertices[index + 5] = 0.5;
 				index += 6;
 
 				// set up the indices
 				if (t > 0 && s > 0) {
 					indices[indicesIndex] = index / 6 - 1;
-					indices[indicesIndex + 1] = index / 6 - 1 - 1;
+					indices[indicesIndex + 1] = index / 6 - 2;
 					indices[indicesIndex + 2] = index / 6 - profileCurve->size() - 2;
 
 					indices[indicesIndex + 3] = index / 6 - 1;
@@ -362,12 +380,9 @@ int main()
 	// Set up the Camera
 	glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
 	glm::vec3 cameraTarget = glm::vec3(0.0f, 0.0f, 0.0f);
-
 	glm::vec3 cameraDirection = glm::normalize(cameraPos - cameraTarget);
-
 	glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
 	glm::vec3 cameraRight = glm::normalize(glm::cross(up, cameraDirection));
-
 	glm::vec3 cameraUp = glm::cross(cameraDirection, cameraRight);
 
 	glm::mat4 view;
@@ -413,16 +428,17 @@ int main()
 
 		// Render
 		// Clear the colorbuffer
-		glClearColor(0.0f, 0.2f, 0.3f, 1.0f);
+		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
+		glClear(GL_DEPTH_BUFFER_BIT);
 
 		glm::mat4 model_matrix;
 		model_matrix = glm::scale(model_matrix, triangle_scale);
-		model_matrix = glm::rotate(model_matrix, glm::radians(valx), glm::vec3(1, 0, 0));
+		model_matrix = glm::rotate(model_matrix, glm::radians(xValue), glm::vec3(1, 0, 0));
 		model_matrix = glm::rotate(model_matrix, glm::radians(y), glm::vec3(0, 1, 0));
-		model_matrix = glm::rotate(model_matrix, glm::radians(valz), glm::vec3(0, 0, 1));
+		model_matrix = glm::rotate(model_matrix, glm::radians(zValue), glm::vec3(0, 0, 1));
 		
-		view_matrix = glm::lookAt(glm::vec3(0.0f, 0.0f, 3.0f),	 // camera positioned here
+		view_matrix = glm::lookAt(glm::vec3(0.0f, 0.0f, cameraZoom),	 // camera positioned here
 									glm::vec3(0.0f, 0.0f, 0.0f), // looks at origin
 									glm::vec3(0.0f, 1.0f, 0.0f));// up vector
 
